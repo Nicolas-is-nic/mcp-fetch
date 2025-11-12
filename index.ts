@@ -296,7 +296,7 @@ async function readBufferLimited(
 }
 
 /**
- * リソースリストが変更されたことをクライアントに通知
+ * 通知客户端资源列表已更改
  */
 async function notifyResourcesChanged(): Promise<void> {
   if (!serverInstance || !serverConnected) return;
@@ -311,18 +311,18 @@ async function notifyResourcesChanged(): Promise<void> {
 }
 
 /**
- * 既存のダウンロードファイルをスキャンしてリソースとして登録
+ * 扫描现有的下载文件并注册为资源
  */
 async function scanAndRegisterExistingFiles(): Promise<void> {
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
   const baseDir = path.join(homeDir, "Downloads", "mcp-fetch");
 
   try {
-    // 日付ディレクトリをスキャン
+    // 扫描日期目录
     const dateDirs = await fs.readdir(baseDir);
 
     for (const dateDir of dateDirs) {
-      if (dateDir.startsWith(".")) continue; // .DS_Store などをスキップ
+      if (dateDir.startsWith(".")) continue; // 跳过 .DS_Store 等文件
 
       const datePath = path.join(baseDir, dateDir);
       const stats = await fs.stat(datePath);
@@ -330,7 +330,7 @@ async function scanAndRegisterExistingFiles(): Promise<void> {
       if (!stats.isDirectory()) continue;
 
       try {
-        // 日付ディレクトリ直下のファイルをチェック
+        // 检查日期目录下的文件
         const files = await fs.readdir(datePath);
 
         for (const file of files) {
@@ -341,10 +341,10 @@ async function scanAndRegisterExistingFiles(): Promise<void> {
 
           if (!fileStats.isFile()) continue;
 
-          // リソースURIを生成 (file:// scheme)
+          // 生成资源URI (file:// scheme)
           const resourceUri = `file://${filePath}`;
 
-          // ファイル名から情報を抽出
+          // 从文件名提取信息
           const baseName = path.basename(file, ".jpg");
           const isIndividual = file.includes("individual");
 
@@ -362,7 +362,7 @@ async function scanAndRegisterExistingFiles(): Promise<void> {
           imageResources.set(resourceUri, resource);
         }
 
-        // サブディレクトリもチェック (individual/merged が存在する場合)
+        // 同时检查子目录 (如果存在 individual/merged)
         const subDirs = ["individual", "merged"];
 
         for (const subDir of subDirs) {
@@ -379,10 +379,10 @@ async function scanAndRegisterExistingFiles(): Promise<void> {
 
               if (!fileStats.isFile()) continue;
 
-              // リソースURIを生成 (file:// scheme)
+              // 生成资源URI (file:// scheme)
               const resourceUri = `file://${filePath}`;
 
-              // ファイル名から情報を抽出
+              // 从文件名提取信息
               const baseName = path.basename(file, ".jpg");
               const resourceName = `${dateDir}/${subDir}/${baseName}`;
               const description = `${subDir === "individual" ? "Individual" : "Merged"} image from ${dateDir}`;
@@ -398,7 +398,7 @@ async function scanAndRegisterExistingFiles(): Promise<void> {
               imageResources.set(resourceUri, resource);
             }
           } catch (_error) {
-            // サブディレクトリが存在しない場合はスキップ
+            // 如果子目录不存在则跳过
           }
         }
       } catch (error) {
@@ -422,7 +422,7 @@ const DEFAULT_USER_AGENT_AUTONOMOUS =
 //   "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)";
 
 /**
- * URLから元のファイル名を抽出
+ * 从URL提取原始文件名
  */
 function extractFilenameFromUrl(url: string): string {
   try {
@@ -430,7 +430,7 @@ function extractFilenameFromUrl(url: string): string {
     const pathname = urlObj.pathname;
     const filename = path.basename(pathname);
 
-    // ファイル名が空の場合や拡張子がない場合のデフォルト処理
+    // 文件名为空或没有扩展名时的默认处理
     if (!filename || !filename.includes(".")) {
       return "image.jpg";
     }
@@ -635,9 +635,9 @@ async function fetchImages(
       );
       const imageBuffer = await readBufferLimited(response, MAX_IMAGE_BYTES);
 
-      // GIF画像の場合は最初のフレームのみ抽出
+      // 对于GIF图像只提取第一帧
       if (img.src.toLowerCase().endsWith(".gif")) {
-        // GIF処理のロジック
+        // GIF处理逻辑
       }
 
       fetchedImages.push({
@@ -652,7 +652,7 @@ async function fetchImages(
 }
 
 /**
- * 複数の画像を垂直方向に結合して1つの画像として返す
+ * 将多张图片垂直合并为一张图片
  */
 async function mergeImagesVertically(
   images: Buffer[],
@@ -664,7 +664,7 @@ async function mergeImagesVertically(
     throw new Error("No images to merge");
   }
 
-  // 各画像のメタデータを取得
+  // 获取各图片的元数据
   const imageMetas = await Promise.all(
     images.map(async (buffer) => {
       const metadata = await sharp(buffer).metadata();
@@ -676,19 +676,19 @@ async function mergeImagesVertically(
     })
   );
 
-  // 最大幅を計算
+  // 计算最大宽度
   const width = Math.min(
     maxWidth,
     Math.max(...imageMetas.map((meta) => meta.width))
   );
 
-  // 画像の高さを合計
+  // 计算图片高度总和
   const totalHeight = Math.min(
     maxHeight,
     imageMetas.reduce((sum, meta) => sum + meta.height, 0)
   );
 
-  // 新しい画像を作成
+  // 创建新图片
   const composite = sharp({
     create: {
       width,
@@ -698,15 +698,15 @@ async function mergeImagesVertically(
     },
   });
 
-  // 各画像を配置
+  // 放置各图片
   let currentY = 0;
   const overlays = [];
 
   for (const meta of imageMetas) {
-    // 画像がキャンバスの高さを超えないようにする
+    // 确保图片不超过画布高度
     if (currentY >= maxHeight) break;
 
-    // 画像のリサイズ（必要な場合のみ）
+    // 调整图片大小（仅在需要时）
     let processedImage = sharp(meta.buffer);
     if (meta.width > width) {
       processedImage = processedImage.resize(width);
@@ -724,12 +724,12 @@ async function mergeImagesVertically(
     currentY += resizedMeta.height || 0;
   }
 
-  // 品質を指定して出力（PNGの代わりにJPEGを使用）
+  // 指定质量输出（使用JPEG代替PNG）
   return composite
     .composite(overlays)
     .jpeg({
-      quality, // JPEG品質を指定（1-100）
-      mozjpeg: true, // mozjpegを使用して更に最適化
+      quality, // 指定JPEG质量（1-100）
+      mozjpeg: true, // 使用mozjpeg进一步优化
     })
     .toBuffer();
 }
@@ -737,18 +737,18 @@ async function mergeImagesVertically(
 // removed unused getImageDimensions helper to satisfy linter
 
 /**
- * 画像を日付ベースのディレクトリに保存し、ファイルパスを返す
+ * 将图片保存到基于日期的目录中，并返回文件路径
  */
 async function saveImageToFile(
   imageBuffer: Buffer,
   sourceUrl: string,
   imageIndex: number = 0
 ): Promise<string> {
-  // 現在の日付をYYYY-MM-DD形式で取得
+  // 获取当前日期的YYYY-MM-DD格式
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
 
-  // 保存先ディレクトリ: ~/Downloads/mcp-fetch/YYYY-MM-DD/merged/
+  // 保存目录: ~/Downloads/mcp-fetch/YYYY-MM-DD/merged/
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
   const baseDir = path.join(
     homeDir,
@@ -758,10 +758,10 @@ async function saveImageToFile(
     "merged"
   );
 
-  // ディレクトリが存在しない場合は作成
+  // 如果目录不存在则创建
   await fs.mkdir(baseDir, { recursive: true });
 
-  // ファイル名を生成（URLのホスト名 + タイムスタンプ + インデックス）
+  // 生成文件名（URL的主机名 + 时间戳 + 索引）
   const urlObj = new URL(sourceUrl);
   const hostname = urlObj.hostname.replace(/[^a-zA-Z0-9]/g, "_");
   const timestamp = now
@@ -773,10 +773,10 @@ async function saveImageToFile(
 
   const filePath = path.join(baseDir, filename);
 
-  // ファイルに保存
+  // 保存到文件
   await fs.writeFile(filePath, imageBuffer);
 
-  // リソースとして登録
+  // 注册为资源
   const resourceUri = `file://${filePath}`;
   const resourceName = `${dateStr}/merged/${filename}`;
   const description = `Merged image from ${sourceUrl} saved on ${dateStr}`;
@@ -791,14 +791,14 @@ async function saveImageToFile(
 
   imageResources.set(resourceUri, resource);
 
-  // クライアントにリソース変更を通知
+  // 通知客户端资源变更
   await notifyResourcesChanged();
 
   return filePath;
 }
 
 /**
- * 個別画像を保存してリソースとして登録
+ * 保存单张图片并注册为资源
  */
 async function saveIndividualImageAndRegisterResource(
   imageBuffer: Buffer,
@@ -807,11 +807,11 @@ async function saveIndividualImageAndRegisterResource(
   altText: string = "",
   originalFilename: string = "image.jpg"
 ): Promise<string> {
-  // 現在の日付をYYYY-MM-DD形式で取得
+  // 获取当前日期的YYYY-MM-DD格式
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
 
-  // 保存先ディレクトリ: ~/Downloads/mcp-fetch/YYYY-MM-DD/individual/
+  // 保存目录: ~/Downloads/mcp-fetch/YYYY-MM-DD/individual/
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
   const baseDir = path.join(
     homeDir,
@@ -821,10 +821,10 @@ async function saveIndividualImageAndRegisterResource(
     "individual"
   );
 
-  // ディレクトリが存在しない場合は作成
+  // 如果目录不存在则创建
   await fs.mkdir(baseDir, { recursive: true });
 
-  // 元のファイル名を使用してユニークファイル名を生成
+  // 使用原始文件名生成唯一文件名
   const ext = path.extname(originalFilename);
   const baseName = path.basename(originalFilename, ext);
   const safeBaseName = baseName.replace(/[^a-zA-Z0-9\-_]/g, "_");
@@ -832,10 +832,10 @@ async function saveIndividualImageAndRegisterResource(
 
   const filePath = path.join(baseDir, filename);
 
-  // ファイルに保存
+  // 保存到文件
   await fs.writeFile(filePath, imageBuffer);
 
-  // リソースとして登録
+  // 注册为资源
   const resourceUri = `file://${filePath}`;
   const resourceName = `${safeBaseName}_${imageIndex}`;
   const description = `${originalFilename}${altText ? ` (${altText})` : ""} from ${sourceUrl}`;
@@ -850,7 +850,7 @@ async function saveIndividualImageAndRegisterResource(
 
   imageResources.set(resourceUri, resource);
 
-  // クライアントにリソース変更を通知
+  // 通知客户端资源变更
   await notifyResourcesChanged();
 
   return filePath;
@@ -889,7 +889,7 @@ async function checkRobotsTxt(
     }
     return true;
   } catch (error) {
-    // ロボットテキストの取得に失敗した場合はアクセスを許可する
+    // 如果robots.txt获取失败则允许访问
     if (error instanceof Error && error.message.includes("robots.txt")) {
       throw error;
     }
@@ -967,7 +967,7 @@ async function fetchUrl(
         if (fetchedImages.length > 0) {
           const imageBuffers = fetchedImages.map((img) => img.data);
 
-          // 個別画像の保存（新API: layoutがindividual/both かつ outputがfile/both の場合のみ）
+          // 保存单张图片（新API: 仅当layout为individual/both且output为file/both时）
           type Layout = undefined | "merged" | "individual" | "both";
           type Output = undefined | "base64" | "file" | "both";
           const layout = (options as { layout?: Layout }).layout;
@@ -976,7 +976,7 @@ async function fetchUrl(
             (options as { output?: Output }).output === undefined &&
             (options as { layout?: Layout }).layout === undefined;
           const shouldSaveIndividual = legacyMode
-            ? true // 互換性のため、レガシーでは常に保存
+            ? true // 为了兼容性，在旧版API中始终保存
             : (layout === "individual" || layout === "both") &&
               (output === "file" || output === "both");
 
@@ -1007,24 +1007,24 @@ async function fetchUrl(
             options.imageQuality
           );
 
-          // Base64エンコード前に画像を最適化
+          // Base64编码前优化图片
           const optimizedImage = await sharp(mergedImage)
             .resize({
-              width: Math.min(options.imageMaxWidth, 1200), // 最大幅を1200pxに制限
-              height: Math.min(options.imageMaxHeight, 1600), // 最大高さを1600pxに制限
+              width: Math.min(options.imageMaxWidth, 1200), // 限制最大宽度为1200px
+              height: Math.min(options.imageMaxHeight, 1600), // 限制最大高度为1600px
               fit: "inside",
               withoutEnlargement: true,
             })
             .jpeg({
-              quality: Math.min(options.imageQuality, 85), // JPEG品質を制限
+              quality: Math.min(options.imageQuality, 85), // 限制JPEG质量
               mozjpeg: true,
-              chromaSubsampling: "4:2:0", // クロマサブサンプリングを使用
+              chromaSubsampling: "4:2:0", // 使用色度子采样
             })
             .toBuffer();
 
           const base64Image = optimizedImage.toString("base64");
 
-          // ファイル保存機能（新API: outputがfile/both の場合のみ）
+          // 文件保存功能（新API: 仅当output为file/both时）
           let filePath: string | undefined;
           const shouldSaveMerged = legacyMode
             ? options.saveImages
@@ -1052,7 +1052,7 @@ async function fetchUrl(
               (!legacyMode && (output === "base64" || output === "both"))
                 ? base64Image
                 : "",
-            mimeType: "image/jpeg", // MIMEタイプをJPEGに変更
+            mimeType: "image/jpeg", // 将MIME类型改为JPEG
             filePath,
           });
         }
@@ -1082,7 +1082,7 @@ async function fetchUrl(
   };
 }
 
-// コマンドライン引数の解析
+// 解析命令行参数
 const args = process.argv.slice(2);
 const IGNORE_ROBOTS_TXT = args.includes("--ignore-robots-txt");
 
@@ -1106,7 +1106,7 @@ const server = new Server(
 // Store server instance for notifications
 serverInstance = server;
 
-// コマンドライン引数の情報をログに出力
+// 将命令行参数信息输出到日志
 console.error(
   `Server started with options: ${IGNORE_ROBOTS_TXT ? "ignore-robots-txt" : "respect-robots-txt"}`
 );
@@ -1122,27 +1122,25 @@ server.setRequestHandler(
       {
         name: "imageFetch",
         description: `
-画像取得に強いMCPフェッチツール。記事本文をMarkdown化し、ページ内の画像を抽出・最適化して返します。
+擅长图片获取的MCP抓取工具。将文章正文转换为Markdown格式,并提取和优化页面中的图片。
 
-新APIの既定（imagesを指定した場合）
-- 画像: 取得してBASE64で返却（最大3枚を縦結合した1枚JPEG）
-- 保存: しない（オプトイン）
-- クロスオリジン: 許可（CDN想定）
+API默认设置（指定images参数时）
+- 图片: 获取并以BASE64格式返回（最多3张图片垂直合并为1张JPEG）
+- 保存: 不保存（可选启用）
+- 跨域: 允许（考虑CDN场景）
 
-パラメータ（新API）
-- url: 取得先URL（必須）
+参数（新API）
+- url: 目标URL（必需）
 - images: true | { output, layout, maxCount, startIndex, size, originPolicy, saveDir }
-  - output: "base64" | "file" | "both"（既定: base64）
-  - layout: "merged" | "individual" | "both"（既定: merged）
-  - maxCount/startIndex（既定: 3 / 0）
-  - size: { maxWidth, maxHeight, quality }（既定: 1000/1600/80）
-  - originPolicy: "cross-origin" | "same-origin"（既定: cross-origin）
-- text: { maxLength, startIndex, raw }（既定: 20000/0/false）
-- security: { ignoreRobotsTxt }（既定: false）
+  - output: "base64" | "file" | "both"（默认: base64）
+  - layout: "merged" | "individual" | "both"（默认: merged）
+  - maxCount/startIndex（默认: 3 / 0）
+  - size: { maxWidth, maxHeight, quality }（默认: 1000/1600/80）
+  - originPolicy: "cross-origin" | "same-origin"（默认: cross-origin）
+- text: { maxLength, startIndex, raw }（默认: 20000/0/false）
+- security: { ignoreRobotsTxt }（默认: false）
 
-旧APIキー（enableFetchImages, returnBase64, saveImages, imageMax*, imageStartIndex 等）は後方互換のため引き続き受け付けます（非推奨）。
-
-Examples（新API）
+示例
 {
   "url": "https://example.com",
   "images": true
@@ -1152,14 +1150,7 @@ Examples（新API）
   "url": "https://example.com",
   "images": { "output": "both", "layout": "both", "maxCount": 4 }
 }
-
-Examples（旧API互換）
-{
-  "url": "https://example.com",
-  "enableFetchImages": true,
-  "returnBase64": true,
-  "imageMaxCount": 2
-}`,
+`,
         inputSchema: zodToJsonSchema(FetchArgsSchema),
       },
     ];
@@ -1167,7 +1158,7 @@ Examples（旧API互換）
   }
 );
 
-// MCPレスポンスの型定義
+// MCP响应的类型定义
 type MCPResponseContent =
   | { type: "text"; text: string }
   | { type: "image"; mimeType: string; data: string };
@@ -1377,7 +1368,7 @@ server.setRequestHandler(
         fetchOptions.startIndex + fetchOptions.maxLength
       );
 
-      // 残りの情報を追加
+      // 添加剩余信息
       const remainingInfo = [];
       if (remainingContent > 0) {
         remainingInfo.push(`${remainingContent} characters of text remaining`);
@@ -1394,7 +1385,7 @@ server.setRequestHandler(
         } and/or imageStartIndex=${fetchOptions.imageStartIndex + images.length} to get more content.</e>`;
       }
 
-      // MCP レスポンスの作成
+      // 创建MCP响应
       const responseContent: MCPResponseContent[] = [
         {
           type: "text",
@@ -1402,7 +1393,7 @@ server.setRequestHandler(
         },
       ];
 
-      // 画像があれば追加（Base64データが存在する場合のみ）
+      // 如果有图片则添加（仅当存在Base64数据时）
       for (const image of images) {
         if (image.data) {
           responseContent.push({
@@ -1413,7 +1404,7 @@ server.setRequestHandler(
         }
       }
 
-      // 保存されたファイルの情報があれば追加
+      // 如果有已保存的文件信息则添加
       const savedFiles = images.filter((img) => img.filePath);
       if (savedFiles.length > 0) {
         const fileInfoText = savedFiles
@@ -1501,7 +1492,7 @@ server.setRequestHandler(
 
 // Start server
 async function runServer() {
-  // サーバー起動時に既存のファイルをリソースとして登録
+  // 服务器启动时将现有文件注册为资源
   await scanAndRegisterExistingFiles();
 
   const transport = new StdioServerTransport();

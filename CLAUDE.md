@@ -15,7 +15,10 @@ npm run build
 # Type checking only (recommended before commits)
 npm run typecheck
 
-# Run all quality checks (biome linting + typecheck)
+# Run unit tests
+npm run unit
+
+# Run all quality checks (unit tests + typecheck + format + biome check)
 npm test
 
 # Format code using Biome
@@ -53,13 +56,23 @@ npm start
 ## Code Patterns
 
 ### Parameter Handling
-Parameters use union types (`string | number`) with Zod validation for automatic type conversion:
+The tool supports both legacy flat parameters and new structured API:
 
+**Legacy API** (backward compatible):
 ```typescript
 url: z.string(),
 maxLength: z.union([z.string(), z.number()]).transform(Number).default(20000),
 enableFetchImages: z.union([z.string(), z.boolean()]).transform(toBool).default(false)
 ```
+
+**New API** (recommended):
+```typescript
+images: { output, layout, maxCount, startIndex, size, originPolicy, saveDir }
+text: { maxLength, startIndex, raw }
+security: { ignoreRobotsTxt }
+```
+
+Parameters use union types with Zod validation for automatic type conversion from string/number/boolean.
 
 ### Error Handling
 Network operations include comprehensive error handling with specific error types for different failure scenarios.
@@ -74,47 +87,111 @@ Network operations include comprehensive error handling with specific error type
 ## Configuration
 
 ### Biome (Linting/Formatting)
+Configuration in `biome.json`:
 - 2-space indentation
 - Double quotes
 - 80-character line width
 - ES5 trailing commas
+- Recommended rules enabled
 - Uses modern Biome instead of ESLint + Prettier
 
 ### TypeScript
+Configuration in `tsconfig.json`:
 - Target: ES2022
-- Module: NodeNext (ESM)
+- Module: NodeNext (ESM with .js extensions in imports)
 - Strict mode enabled
 - Output: `./dist`
+- Module resolution: NodeNext
 
 ## Testing Strategy
 
-Current approach relies on:
-1. TypeScript compilation as primary validation
-2. Biome for code quality
-3. Manual testing via Claude Desktop integration
+Current approach:
+1. Unit tests with Vitest (tests/image-fetch.test.ts)
+2. TypeScript compilation for type safety
+3. Biome for code quality
+4. Manual testing via Claude Desktop integration
 
-**Note**: No unit tests are currently implemented. The `npm test` command runs typecheck + biome checks only.
+The `npm test` command runs: `npm run unit && npm run typecheck && npm run format && npm run check`
 
 ## Deployment
 
-The tool is designed for npx usage:
+### 本地开发部署
+
+#### 1. 构建项目
+首先需要构建 TypeScript 项目：
 ```bash
-npx -y @kazuph/mcp-fetch
+npm run build
 ```
 
-For Claude Desktop integration, add to MCP tools configuration:
+这将编译 TypeScript 代码到 `./dist` 目录。
+
+#### 2. 添加到 Claude Desktop 配置
+
+找到 Claude Desktop 配置文件位置：
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+在配置文件中添加 MCP 服务器配置：
+
 ```json
 {
-  "tools": {
-    "imageFetch": {
+  "mcpServers": {
+    "mcp-fetch": {
+      "command": "node",
+      "args": ["/Users/yangming/pycharm-workspace/mcp-fetch/dist/index.js"]
+    }
+  }
+}
+```
+
+**注意**:
+- 将路径 `/Users/yangming/pycharm-workspace/mcp-fetch/dist/index.js` 替换为你的实际项目路径
+- 使用绝对路径以确保 Claude Desktop 能正确找到文件
+- 每次修改代码后，需要重新运行 `npm run build` 来更新编译后的文件
+
+#### 3. 重启 Claude Desktop
+
+保存配置文件后，完全退出并重启 Claude Desktop 应用，新的 MCP 服务器将会加载。
+
+#### 4. 验证安装
+
+在 Claude Desktop 中，你应该能够使用 `imageFetch` 工具来获取网页内容和图片。
+
+### npm 包部署
+
+The tool is designed for npx usage:
+```bash
+npx -y @nicolas-is-nic/mcp-fetch
+```
+
+For Claude Desktop integration via npm package, add to MCP tools configuration:
+```json
+{
+  "mcpServers": {
+    "mcp-fetch": {
       "command": "npx",
-      "args": ["-y", "@kazuph/mcp-fetch"]
+      "args": ["-y", "@nicolas-is-nic/mcp-fetch"]
     }
   }
 }
 ```
 
 ## Important Implementation Details
+
+### Security Hardening (v1.5.1+)
+- Only `http://` and `https://` URLs allowed
+- SSRF protection: blocks private/loopback/link-local IPs
+- Manual redirect handling with validation (max 3 hops)
+- Request timeouts (default 12s, configurable via `MCP_FETCH_TIMEOUT_MS`)
+- Response size limits: HTML up to 2MB, images up to 10MB
+
+Environment variables for security tuning:
+- `MCP_FETCH_TIMEOUT_MS` (default: 12000)
+- `MCP_FETCH_MAX_REDIRECTS` (default: 3)
+- `MCP_FETCH_MAX_HTML_BYTES` (default: 2000000)
+- `MCP_FETCH_MAX_IMAGE_BYTES` (default: 10000000)
+- `MCP_FETCH_DISABLE_SSRF_GUARD` (set to "1" to disable SSRF checks)
 
 ### Platform Specificity
 - Designed for macOS (mentioned in README)
@@ -134,5 +211,12 @@ For Claude Desktop integration, add to MCP tools configuration:
 1. Make code changes in `index.ts`
 2. Run `npm run typecheck` to verify TypeScript
 3. Run `npm run format` to ensure consistent formatting
-4. Run `npm test` to run all validations
+4. Run `npm test` to run all validations (unit + typecheck + format + biome)
 5. Test manually with `npm run dev` or via Claude Desktop integration
+
+### MCP Resource Management
+The server implements MCP resources protocol for saved images:
+- Images saved to `~/Downloads/mcp-fetch/YYYY-MM-DD/` are registered as MCP resources
+- On startup, `scanAndRegisterExistingFiles()` loads all existing images
+- `notifyResourcesChanged()` notifies clients when new images are saved
+- Resource URIs use `file://` scheme pointing to local JPEG files
